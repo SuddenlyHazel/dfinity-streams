@@ -1,8 +1,12 @@
 import Array "mo:base/Array";
 import Debug "mo:base/Debug";
+import Hash "mo:base/Hash";
+import HashMap "mo:base/HashMap";
 import Nat "mo:base/Nat";
+import Option "mo:base/Option";
 import Result "mo:base/Result";
 import Time "mo:base/Time";
+import ExperimentalCycles "mo:base/ExperimentalCycles";
 
 /// Challenges 
 // 1. Consensus Lag
@@ -21,21 +25,32 @@ shared({ caller = initializer}) actor class Service() {
         nextStep : Nat;
     };
 
-    var blobs : [[Int8]] = [];
+    public type StreamBlobUpdate = {
+        step : Nat;
+        blob : [Int8]
+    };
+
+    public type AudioData = [Int8];
+    
+    // Listen.. It feels really silly to do this. However, I needed a cheap way to deal with messages coming in out of order
+    // I don't like this, you don't like this, let's be happy it works for a tech demo. Cool? Cool.
+    let audioData = HashMap.HashMap<Nat, AudioData>(5, func (l : Nat, r : Nat) {l == r}, Hash.hash);
+
     var lastTick : Int = 0;
-    var pushSync : Nat = 0;
 
     var locked : Bool = false;
+    
+    let startCycles = ExperimentalCycles.balance();
+    var pageLoads = 0;
 
-    public shared func blob(b : [Int8]) : async () {
+    public shared func blob(payload : StreamBlobUpdate) : async () {
         // We need to tag an order number on these.
         if (locked) {
             return;
         };
 
         lastTick := Time.now();
-        blobs := Array.append(blobs, [b]);
-        pushSync += 1;
+        audioData.put(payload.step, payload.blob);
     };
 
     public shared(msg) func setLock(state : Bool) : async () {
@@ -46,15 +61,15 @@ shared({ caller = initializer}) actor class Service() {
     };
 
     public query func getBlob(thisStep : Nat) : async Result.Result<StreamTick, FetchErr> {
-        if (blobs.size() < 5) {
+        if (audioData.size() < 5) {
             return #err(#streamHydrating);
         };
 
-        if (thisStep > blobs.size() - 1) {
+        if (thisStep > audioData.size() - 1) {
             return #err(#outOfData);
         };
 
-        if (thisStep == blobs.size() - 1) {
+        if (thisStep == audioData.size() - 1) {
             let now = Time.now();
             if (now - lastTick > 10000000000) {
                 return #err(#streamEnded)
@@ -65,12 +80,12 @@ shared({ caller = initializer}) actor class Service() {
         var nxt = thisStep;
 
         if (thisStep == 0) {
-            nxt := blobs.size() - 5;
+            //nxt := audioData.size() - 5; ode uncomment this for live stream!
         };
 
         #ok({ 
             nextStep = nxt + 1;
-            data = blobs[thisStep]
+            data = Option.unwrap(audioData.get(nxt))
         });
     };
 
@@ -78,6 +93,21 @@ shared({ caller = initializer}) actor class Service() {
         if (msg.caller != initializer) {
             return;
         };
-        blobs := [];
+        for ((k, _) in audioData.entries()) {
+            audioData.delete(k);
+        };
+    };
+
+    public func incPageLoads() : async () {
+        pageLoads := pageLoads + 1;
+    };
+
+    public query func getInfo() : async {start : Nat; now : Nat; loads : Nat; totalChunks : Nat} {
+        {
+            start = startCycles;
+            now = ExperimentalCycles.balance();
+            loads = pageLoads;
+            totalChunks = audioData.size();
+        }
     }
 };
