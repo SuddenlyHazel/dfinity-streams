@@ -2,8 +2,8 @@
   <div class="columns m-1">
     <div class="column is-10">
       <section class="section" v-if="info">
-        Fictitious Value On Deploy ${{(info.start / 10**12).toFixed(5)}}<br>
-        Fictitious Value Now ${{(info.now / 10**12).toFixed(5)}} <br>
+        Fictitious Value On Deploy ${{(info.start / 10**12).toFixed(10)}}<br>
+        Fictitious Value Now ${{(info.now / 10**12).toFixed(10)}} <br>
         Page Loads {{info.loads}} <br>
         Total Chunks of LoFi Audio for your Enjoyment {{info.totalChunks}}
       </section>
