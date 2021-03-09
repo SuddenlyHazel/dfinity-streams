@@ -10,18 +10,15 @@ import Principal "mo:base/Principal";
 import Result "mo:base/Result";
 import Streamer "streamer";
 import Time "mo:base/Time";
+import Types "types";
 
 actor Service {
     let ONE_SECOND_IN_NANO = Int.pow(10, 9);
 
     var TIME_OUT = 30*ONE_SECOND_IN_NANO;
+    var TOTAL_STREAMS_CREATED = 0;
 
-    public type Stream = {
-        name : Text;
-        stream : Principal;
-        lastTick : Int;
-    };
-    var streams : HashMap.HashMap<Principal, Stream> = HashMap.HashMap<Principal, Stream>(0, func(l : Principal, r : Principal){l == r}, Principal.hash);
+    var streams : HashMap.HashMap<Principal, Types.Stream> = HashMap.HashMap<Principal, Types.Stream>(0, func(l : Principal, r : Principal){l == r}, Principal.hash);
 
     var locked : Bool = false;
     
@@ -35,9 +32,11 @@ actor Service {
     public shared (msg) func streamHeartBeat() {
         switch(streams.get(msg.caller)){
             case(null) {};
-            case(?v : ?Stream) {
+            case(?v : ?Types.Stream) {
                 let tick = {
-                    name = v.name;
+                    dislayName = v.dislayName;
+                    streamName = v.streamName;
+                    description = v.description;
                     stream = v.stream;
                     lastTick = Time.now();
                 };
@@ -46,12 +45,16 @@ actor Service {
         }
     };
 
-    public func createStream(name : Text, streamKey : Text) : async Principal {
-        let newStreamer = await Streamer.Streamer(streamKey);
+    public func createStream(egg : Types.StreamEgg, streamKey : Text) : async Principal {
+        TOTAL_STREAMS_CREATED := TOTAL_STREAMS_CREATED + 1;
+
+        let newStreamer = await Streamer.Streamer(streamKey, streamHeartBeat);
         let p = Principal.fromActor(newStreamer);
 
         let data = {
-            name = name;
+            dislayName = egg.displayName;
+            streamName = egg.streamName;
+            description = egg.description;
             stream = p;
             lastTick = Time.now();
         };
@@ -60,10 +63,10 @@ actor Service {
         return p;
     };
 
-    public query func getStreams() : async [Stream] {
-        var data : [Stream] = [];
+    public query func getStreams() : async [Types.Stream] {
+        var data : [Types.Stream] = [];
         let now = Time.now();
-
+        
         for ((k, v) in streams.entries()) {
             if (now - v.lastTick < TIME_OUT) {
                 data := Array.append(data, [v])

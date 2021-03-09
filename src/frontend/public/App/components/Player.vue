@@ -1,16 +1,7 @@
 <template>
   <div>
     <section>
-      <div>
-        <section class="section">Stream State {{ state }}</section>
-        <section class="section">
-          On Chunk {{ nextStep }}. <br>
-          (The code has been modified to play back the entire stream data instead of just starting 10 seconds behind)
-        </section>
-        <section class="section">
-          <b-button @click="start">Start Stream</b-button>
-        </section>
-      </div>
+      <div></div>
     </section>
   </div>
 </template>
@@ -19,11 +10,12 @@
 </style>
 
 <script>
-import canister from "ic:canisters/backend";
 import workletUrl from "../../stream_feeder.worklet.js";
+import { EventBus } from "../../stream-controller-bus";
+import IDL from "../../stream";
 
 let startAudio = function (instance, cb) {
-  const ctx = new AudioContext({ sampleRate: 44100, latencyHint : 'playback' });
+  const ctx = new AudioContext({ sampleRate: 44100, latencyHint: "playback" });
 
   ctx.audioWorklet
     .addModule(
@@ -42,13 +34,15 @@ let startAudio = function (instance, cb) {
             console.log("Enqueing...");
             return;
           } else if (v.err.hasOwnProperty("streamEnded")) {
+            EventBus.$emit("live-stream-ended")
             instance.state = "Stream Finished";
           }
         } else {
           console.log(v);
           instance.nextStep = v.ok.nextStep;
           console.log(instance.nextStep);
-          ctx.decodeAudioData(new Uint8Array(v.ok.data).buffer)
+          ctx
+            .decodeAudioData(new Uint8Array(v.ok.data).buffer)
             .then((dec) =>
               instance.streamProcessor.port.postMessage(dec.getChannelData(0))
             );
@@ -56,10 +50,10 @@ let startAudio = function (instance, cb) {
       };
 
       instance.streamProcessor.port.onmessage = (v) => {
-        if (v.data == 'hydrate') {
-          console.log("Needs data!")
+        if (v.data == "hydrate") {
+          console.log("Needs data!");
         }
-        canister.getBlob(instance.nextStep).then((v) => {
+        instance.streamCanister.getAudioTick(instance.nextStep).then((v) => {
           instance.handleAudio(v);
         });
       };
@@ -73,6 +67,7 @@ export default {
       nextStep: 0,
       streamProcessor: undefined,
       handleAudio: undefined,
+      streamCanister: undefined,
       state: "None",
     };
   },
@@ -85,7 +80,7 @@ export default {
     },
     fetchAudio: function () {
       this.state = "Running";
-      canister.getBlob(this.nextStep).then((v) => {
+      this.streamCanister.getAudioTick(this.nextStep).then((v) => {
         this.handleAudio(v);
         /*
          */
@@ -93,6 +88,16 @@ export default {
     },
   },
   async mounted() {
+    let self = this;
+    EventBus.$on("start-stream", function (v) {
+      self.nextStep = 0;
+      self.streamCanister = window.ic.agent.makeActorFactory(IDL)({
+        canisterId: v.stream.toText(),
+      });
+      console.log(self.streamCanister)
+      console.log("Starting.. ", v);
+      self.start();
+    });
   },
 };
 </script>

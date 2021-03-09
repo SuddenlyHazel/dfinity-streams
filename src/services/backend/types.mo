@@ -17,5 +17,19 @@ module {
         blob : [Int8]
     };
 
+    public type StreamEgg = {
+        displayName : Text;
+        streamName : Text;
+        description : Text;
+    };
+
+    public type Stream = {
+        dislayName : Text;
+        streamName : Text;
+        description : Text;
+        stream : Principal;
+        lastTick : Int;
+    };
+
     public type AudioData = [Int8];
 }

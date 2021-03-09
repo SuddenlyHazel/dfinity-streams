@@ -1,16 +1,40 @@
 <template>
-  <div class="columns m-1">
+  <div>
+    <b-navbar>
+      <template #brand>
+        <b-navbar-item> Hazels Streams </b-navbar-item>
+      </template>
+      <template #end>
+        <b-navbar-item tag="div">
+          <div class="buttons">
+            <a @click="isGoLiveModalActive = true" class="button is-primary">
+              <strong>Go Live!</strong>
+            </a>
+          </div>
+        </b-navbar-item>
+      </template>
+    </b-navbar>
+    <!--GO LIVE MODAL-->
+    <b-modal
+      v-model="isGoLiveModalActive"
+      has-modal-card
+      full-screen
+      :can-cancel="false"
+    >
+      <div class="modal-card" style="width: auto">
+        <section class="modal-card-body">
+          <go-live></go-live>
+        </section>
+        <footer class="modal-card-foot">
+          <b-button label="Close" @click="closeGoLiveModal()" />
+        </footer>
+      </div>
+    </b-modal>
+
+    <stream-list></stream-list>
     <div class="column is-10">
-      <section class="section" v-if="info">
-        Fictitious Value On Deploy ${{(info.start / 10**12).toFixed(10)}}<br>
-        Fictitious Value Now ${{(info.now / 10**12).toFixed(10)}} <br>
-        Page Loads {{info.loads}} <br>
-        Total Chunks of LoFi Audio for your Enjoyment {{info.totalChunks}}
-      </section>
       <player></player>
-      <section class="section">
-        <b-button @click="record">Record (only owner)</b-button>
-      </section>
+      <section class="section"></section>
     </div>
   </div>
 </template>
@@ -20,57 +44,28 @@
 <script>
 import Player from "./components/Player.vue";
 import canister from "ic:canisters/backend";
-let RecordRTC = require("recordrtc");
-window.canister = canister;
+import StreamList from "./components/StreamList.vue";
+import GoLive from "./components/GoLive.vue";
+import { EventBus } from "../stream-controller-bus";
 
 export default {
-  components: { Player },
+  components: { Player, StreamList, GoLive },
   data() {
     return {
       mediaRecorder: undefined,
       recorder: undefined,
       mediaStep: 0,
-      info : undefined,
+      info: undefined,
+      isGoLiveModalActive: false,
     };
   },
   computed: {},
   methods: {
-    record: function () {
-      this.recorder.startRecording();
-    },
+    closeGoLiveModal : function() {
+      this.isGoLiveModalActive = false;
+      EventBus.$emit("go-live-event", "stop")
+    }
   },
-  async mounted() {
-    canister.incPageLoads();
-    canister.getInfo().then(v => {
-      this.info = v;
-    });
-
-    let self = this;
-    navigator.mediaDevices
-      .getUserMedia({ audio: true })
-      .then(function (stream) {
-        self.recorder = RecordRTC(stream, {
-          type: "audio",
-          mimeType: "audio/webm",
-          sampleRate: 44100,
-          recorderType: RecordRTC.StereoAudioRecorder,
-          numberOfAudioChannels: 1,
-          timeSlice: 5000,
-          desiredSampRate: 16000,
-          ondataavailable: function (blob) {
-            blob.arrayBuffer().then((v) => {
-              canister
-                .blob({
-                  blob: Array.from(new Int8Array(v)),
-                  step: self.mediaStep
-                })
-                .then((_) => console.log("Payload Stored in IC!"));
-                self.mediaStep += 1;
-            });
-          },
-        });
-      })
-      .catch((err) => console.error("getUserMedia", err));
-  },
+  async mounted() {},
 };
 </script>
